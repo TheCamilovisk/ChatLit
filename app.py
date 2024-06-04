@@ -12,6 +12,10 @@ from langchain_core.vectorstores import VectorStore
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pypdf import PdfReader
 
+
+st.set_page_config(layout="wide")
+
+
 load_dotenv()
 
 
@@ -101,9 +105,10 @@ def handle_conversation_creation(uploaded_file: BytesIO):
 
 def handle_file_upload():
     """Handle the file upload process."""
-    if uploaded_file := st.file_uploader("Choose a PDF file", type="pdf"):
-        if "chat_chain" not in st.session_state:
-            handle_conversation_creation(uploaded_file)
+    with st.sidebar:
+        if uploaded_file := st.file_uploader("Choose a PDF file", type="pdf"):
+            if "chat_chain" not in st.session_state:
+                handle_conversation_creation(uploaded_file)
 
 
 def submit_question():
@@ -116,7 +121,7 @@ def submit_question():
 
 def display_chat_history():
     """Display the chat history."""
-    with st.container(height=400, border=False):
+    with st.container(height=600, border=False):
         for message in st.session_state.get("chat_history", []):
             messeger = (
                 ":green[User]" if isinstance(message, HumanMessage) else ":blue[AI]"
