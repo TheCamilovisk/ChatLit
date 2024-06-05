@@ -7,14 +7,11 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_core.messages import HumanMessage
 from langchain_core.vectorstores import VectorStore
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pypdf import PdfReader
 
-
 st.set_page_config(layout="wide")
-
 
 load_dotenv()
 
@@ -103,6 +100,12 @@ def handle_conversation_creation(uploaded_file: BytesIO):
         st.rerun()
 
 
+def init_session_state():
+    """Initialize session state variables."""
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+
 def handle_file_upload():
     """Handle the file upload process."""
     with st.sidebar:
@@ -111,39 +114,50 @@ def handle_file_upload():
                 handle_conversation_creation(uploaded_file)
 
 
-def submit_question():
-    """Submit the user's question to the chat chain."""
-    question = st.session_state.question_widget
-    result = st.session_state.chat_chain.invoke({"question": question})
-    st.session_state.chat_history = result["chat_history"]
-    st.session_state.question_widget = ""
+def submit_question(user_prompt: str) -> str:
+    """Submit the user's question to the chat chain.
+
+    Args:
+        user_prompt (str): The user's question.
+
+    Returns:
+        str: The response from the chat chain.
+    """
+    result = st.session_state.chat_chain.invoke({"question": user_prompt})
+    return result["answer"]
 
 
 def display_chat_history():
     """Display the chat history."""
-    with st.container(height=600, border=False):
-        for message in st.session_state.get("chat_history", []):
-            messeger = (
-                ":green[User]" if isinstance(message, HumanMessage) else ":blue[AI]"
-            )
-            st.subheader(messeger)
-            st.write(message.content)
+    for message in st.session_state.get("messages", []):
+        role = message["role"]
+        content = message["content"]
+        st.chat_message(role).markdown(content)
 
 
 def handle_conversation():
     """Handle the conversation input from the user."""
-    if "chat_chain" in st.session_state:
-        st.text_input(
-            "Ask about the uploaded document",
-            key="question_widget",
-            on_change=submit_question,
-        )
+    if "chat_chain" not in st.session_state:
+        return
+
+    if user_prompt := st.chat_input(
+        "Ask about the uploaded document",
+    ):
+        st.chat_message("user").markdown(user_prompt)
+        st.session_state.messages.append({"role": "user", "content": user_prompt})
+
+        response = submit_question(user_prompt)
+
+        st.chat_message("assistant").markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
 
 def main():
     """Main function to run the Streamlit app."""
     st.title("ChatLit")
     st.write("Upload a PDF file and ask questions about its content.")
+
+    init_session_state()
 
     handle_file_upload()
 
