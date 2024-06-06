@@ -1,17 +1,18 @@
+import gc
 from io import BytesIO
 from typing import List
 
 import streamlit as st
+import torch
 from dotenv import load_dotenv
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.text_splitter import CharacterTextSplitter
+from langchain_community.chat_models import ChatOllama
+from langchain_community.embeddings import HuggingFaceInstructEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.vectorstores import VectorStore
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.chat_models import ChatOllama
-from langchain_community.embeddings import FastEmbedEmbeddings
-from langchain.vectorstores.utils import filter_complex_metadata
 from pypdf import PdfReader
 
 st.set_page_config(layout="wide")
@@ -64,9 +65,12 @@ def create_vector_db(uploaded_document: BytesIO) -> FAISS:
         FAISS: The vector store created from the document text chunks.
     """
     # embeddings = OpenAIEmbeddings()
-    embeddings = FastEmbedEmbeddings()
+    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-large")
     text_chunks = load_and_split_document(uploaded_document)
     vector_store = FAISS.from_texts(text_chunks, embeddings)
+    del embeddings
+    gc.collect()
+    torch.cuda.empty_cache()
     return vector_store
 
 
@@ -93,18 +97,16 @@ def create_chat_chain(vector_store: VectorStore) -> ConversationalRetrievalChain
     return chat_chain
 
 
-def handle_conversation_creation(uploaded_file: BytesIO):
+def handle_file_ingestion(uploaded_file: BytesIO):
     """Handle the creation of the conversation.
 
     Args:
         uploaded_file (BytesIO): The uploaded PDF file.
     """
-    from time import sleep
     with st.spinner(f"Loading {uploaded_file.name}"):
         vector_store = create_vector_db(uploaded_file)
-        chat_chain = create_chat_chain(vector_store)
+        st.session_state.vector_store = vector_store
 
-    st.session_state.chat_chain = chat_chain
     st.rerun()
 
 
@@ -118,8 +120,16 @@ def handle_file_upload():
     """Handle the file upload process."""
     with st.sidebar:
         if uploaded_file := st.file_uploader("Choose a PDF file", type="pdf"):
-            if "chat_chain" not in st.session_state:
-                handle_conversation_creation(uploaded_file)
+            if "vector_store" not in st.session_state:
+                handle_file_ingestion(uploaded_file)
+
+
+def handle_chat_creation():
+    with st.sidebar:
+        with st.spinner("Creating chat"):
+            vector_store = st.session_state.vector_store
+            chat_chain = create_chat_chain(vector_store)
+            st.session_state.chat_chain = chat_chain
 
 
 def submit_question(user_prompt: str) -> str:
@@ -131,6 +141,8 @@ def submit_question(user_prompt: str) -> str:
     Returns:
         str: The response from the chat chain.
     """
+    if "chat_chain" not in st.session_state:
+        handle_chat_creation()
     result = st.session_state.chat_chain.invoke({"question": user_prompt})
     return result["answer"]
 
@@ -145,7 +157,7 @@ def display_chat_history():
 
 def handle_conversation():
     """Handle the conversation input from the user."""
-    if "chat_chain" not in st.session_state:
+    if "vector_store" not in st.session_state:
         return
 
     if user_prompt := st.chat_input(
