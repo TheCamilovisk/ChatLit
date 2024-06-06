@@ -9,6 +9,9 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.vectorstores import VectorStore
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.chat_models import ChatOllama
+from langchain_community.embeddings import FastEmbedEmbeddings
+from langchain.vectorstores.utils import filter_complex_metadata
 from pypdf import PdfReader
 
 st.set_page_config(layout="wide")
@@ -47,6 +50,7 @@ def load_and_split_document(uploaded_file: BytesIO) -> List[str]:
     )
     raw_text = load_document(uploaded_file)
     chunks = text_splitter.split_text(raw_text)
+    # chunks = filter_complex_metadata(chunks)
     return chunks
 
 
@@ -59,7 +63,8 @@ def create_vector_db(uploaded_document: BytesIO) -> FAISS:
     Returns:
         FAISS: The vector store created from the document text chunks.
     """
-    embeddings = OpenAIEmbeddings()
+    # embeddings = OpenAIEmbeddings()
+    embeddings = FastEmbedEmbeddings()
     text_chunks = load_and_split_document(uploaded_document)
     vector_store = FAISS.from_texts(text_chunks, embeddings)
     return vector_store
@@ -74,7 +79,8 @@ def create_chat_chain(vector_store: VectorStore) -> ConversationalRetrievalChain
     Returns:
         ConversationalRetrievalChain: The chat chain for conversation.
     """
-    llm = ChatOpenAI()
+    # llm = ChatOpenAI()
+    llm = ChatOllama(model="mistral")
     memory_buffer = ConversationBufferMemory(
         memory_key="chat_history", return_messages=True
     )
@@ -93,11 +99,13 @@ def handle_conversation_creation(uploaded_file: BytesIO):
     Args:
         uploaded_file (BytesIO): The uploaded PDF file.
     """
+    from time import sleep
     with st.spinner(f"Loading {uploaded_file.name}"):
         vector_store = create_vector_db(uploaded_file)
         chat_chain = create_chat_chain(vector_store)
-        st.session_state.chat_chain = chat_chain
-        st.rerun()
+
+    st.session_state.chat_chain = chat_chain
+    st.rerun()
 
 
 def init_session_state():
