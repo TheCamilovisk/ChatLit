@@ -1,4 +1,5 @@
 import gc
+from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import List
 
@@ -11,6 +12,8 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.chat_models import ChatOllama
 from langchain_community.embeddings import HuggingFaceInstructEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.vectorstores import VectorStore
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pypdf import PdfReader
@@ -18,6 +21,72 @@ from pypdf import PdfReader
 st.set_page_config(layout="wide")
 
 load_dotenv()
+
+
+class BaseChatProvider(ABC):
+    def __init__(self, uploaded_file: BytesIO) -> None:
+        self.vector_store: VectorStore = self._create_vector_store(uploaded_file)
+        self.chat_chain: ConversationalRetrievalChain = self._create_chat_chain(
+            self.vector_store
+        )
+
+    @property
+    @abstractmethod
+    def embbedings(self) -> Embeddings:
+        pass
+
+    @property
+    @abstractmethod
+    def llm(self) -> BaseChatModel:
+        pass
+
+    def _create_vector_store(self, uploaded_file) -> VectorStore:
+        embbedings = self.embbedings
+        text_chunks = load_and_split_document(uploaded_file)
+        vector_store = FAISS.from_texts(text_chunks, embbedings)
+        return vector_store
+
+    def _create_chat_chain(
+        self, vector_store: VectorStore
+    ) -> ConversationalRetrievalChain:
+        llm = self.llm
+        memory_buffer = ConversationBufferMemory(
+            memory_key="chat_history", return_messages=True
+        )
+        chat_chain = ConversationalRetrievalChain.from_llm(
+            llm=llm, retriever=vector_store.as_retriever(), memory=memory_buffer
+        )
+        return chat_chain
+
+    def query(self, prompt: str) -> str:
+        result = self.chat_chain.invoke({"question": prompt})
+        return result["answer"]
+
+
+class OllamaChatProvider(BaseChatProvider):
+    @property
+    def embbedings(self) -> Embeddings:
+        return HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-large")
+
+    @property
+    def llm(self) -> BaseChatModel:
+        return ChatOllama(model="mistral")
+
+    def _create_vector_store(self, uploaded_file) -> VectorStore:
+        vector_store = super()._create_vector_store(uploaded_file)
+        gc.collect()
+        torch.cuda.empty_cache()
+        return vector_store
+
+
+class OpenAIChatProvider(BaseChatProvider):
+    @property
+    def embbedings(self) -> Embeddings:
+        return OpenAIEmbeddings()
+
+    @property
+    def llm(self) -> BaseChatModel:
+        return ChatOpenAI()
 
 
 def load_document(uploaded_file: BytesIO) -> str:
@@ -51,61 +120,22 @@ def load_and_split_document(uploaded_file: BytesIO) -> List[str]:
     )
     raw_text = load_document(uploaded_file)
     chunks = text_splitter.split_text(raw_text)
-    # chunks = filter_complex_metadata(chunks)
     return chunks
 
 
-def create_vector_db(uploaded_document: BytesIO) -> FAISS:
-    """Create a vector database from the uploaded document.
-
-    Args:
-        uploaded_document (BytesIO): The uploaded PDF file.
-
-    Returns:
-        FAISS: The vector store created from the document text chunks.
-    """
-    # embeddings = OpenAIEmbeddings()
-    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-large")
-    text_chunks = load_and_split_document(uploaded_document)
-    vector_store = FAISS.from_texts(text_chunks, embeddings)
-    del embeddings
-    gc.collect()
-    torch.cuda.empty_cache()
-    return vector_store
-
-
-def create_chat_chain(vector_store: VectorStore) -> ConversationalRetrievalChain:
-    """Create a conversational retrieval chain.
-
-    Args:
-        vector_store (VectorStore): The vector store for retrieving text.
-
-    Returns:
-        ConversationalRetrievalChain: The chat chain for conversation.
-    """
-    # llm = ChatOpenAI()
-    llm = ChatOllama(model="mistral")
-    memory_buffer = ConversationBufferMemory(
-        memory_key="chat_history", return_messages=True
-    )
-    chat_chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vector_store.as_retriever(),
-        memory=memory_buffer,
-    )
-
-    return chat_chain
-
-
-def handle_file_ingestion(uploaded_file: BytesIO):
+def prepare_chat(uploaded_file: BytesIO, chat_provider_type: str):
     """Handle the creation of the conversation.
 
     Args:
         uploaded_file (BytesIO): The uploaded PDF file.
     """
+    providers_classes = {
+        "OpenAI": OpenAIChatProvider,
+        "Ollama (Mistral)": OllamaChatProvider,
+    }
     with st.spinner(f"Loading {uploaded_file.name}"):
-        vector_store = create_vector_db(uploaded_file)
-        st.session_state.vector_store = vector_store
+        chat_provider = providers_classes[chat_provider_type](uploaded_file)
+        st.session_state.chat_provider = chat_provider
 
     st.rerun()
 
@@ -119,32 +149,14 @@ def init_session_state():
 def handle_file_upload():
     """Handle the file upload process."""
     with st.sidebar:
+        chat_provider_type = st.selectbox(
+            "Chat type",
+            ("OpenAI", "Ollama (Mistral)"),
+            disabled="chat_provider" in st.session_state,
+        )
         if uploaded_file := st.file_uploader("Choose a PDF file", type="pdf"):
-            if "vector_store" not in st.session_state:
-                handle_file_ingestion(uploaded_file)
-
-
-def handle_chat_creation():
-    with st.sidebar:
-        with st.spinner("Creating chat"):
-            vector_store = st.session_state.vector_store
-            chat_chain = create_chat_chain(vector_store)
-            st.session_state.chat_chain = chat_chain
-
-
-def submit_question(user_prompt: str) -> str:
-    """Submit the user's question to the chat chain.
-
-    Args:
-        user_prompt (str): The user's question.
-
-    Returns:
-        str: The response from the chat chain.
-    """
-    if "chat_chain" not in st.session_state:
-        handle_chat_creation()
-    result = st.session_state.chat_chain.invoke({"question": user_prompt})
-    return result["answer"]
+            if "chat_provider" not in st.session_state:
+                prepare_chat(uploaded_file, chat_provider_type)
 
 
 def display_chat_history():
@@ -157,7 +169,7 @@ def display_chat_history():
 
 def handle_conversation():
     """Handle the conversation input from the user."""
-    if "vector_store" not in st.session_state:
+    if "chat_provider" not in st.session_state:
         return
 
     if user_prompt := st.chat_input(
@@ -166,10 +178,10 @@ def handle_conversation():
         st.chat_message("user").markdown(user_prompt)
         st.session_state.messages.append({"role": "user", "content": user_prompt})
 
-        response = submit_question(user_prompt)
+        answer = st.session_state.chat_provider.query(user_prompt)
 
-        st.chat_message("assistant").markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.chat_message("assistant").markdown(answer)
+        st.session_state.messages.append({"role": "assistant", "content": answer})
 
 
 def main():
