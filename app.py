@@ -24,7 +24,22 @@ load_dotenv()
 
 
 class BaseChatProvider(ABC):
+    """Abstract base class for chat providers.
+
+    This class defines the template for creating a chat provider that
+    processes a PDF file and generates conversational responses.
+
+    Attributes:
+        vector_store (VectorStore): The vector store for retrieving text.
+        chat_chain (ConversationalRetrievalChain): The chat chain for conversation.
+    """
+
     def __init__(self, uploaded_file: BytesIO) -> None:
+        """Initialize the chat provider with a PDF file.
+
+        Args:
+            uploaded_file (BytesIO): The uploaded PDF file.
+        """
         self.vector_store: VectorStore = self._create_vector_store(uploaded_file)
         self.chat_chain: ConversationalRetrievalChain = self._create_chat_chain(
             self.vector_store
@@ -33,14 +48,32 @@ class BaseChatProvider(ABC):
     @property
     @abstractmethod
     def embbedings(self) -> Embeddings:
+        """Abstract property to get the embeddings model.
+
+        Returns:
+            Embeddings: The embeddings model.
+        """
         pass
 
     @property
     @abstractmethod
     def llm(self) -> BaseChatModel:
+        """Abstract property to get the language model.
+
+        Returns:
+            BaseChatModel: The language model.
+        """
         pass
 
     def _create_vector_store(self, uploaded_file) -> VectorStore:
+        """Create a vector store from the uploaded document.
+
+        Args:
+            uploaded_file (BytesIO): The uploaded PDF file.
+
+        Returns:
+            VectorStore: The vector store created from the document text chunks.
+        """
         embbedings = self.embbedings
         text_chunks = load_and_split_document(uploaded_file)
         vector_store = FAISS.from_texts(text_chunks, embbedings)
@@ -49,6 +82,14 @@ class BaseChatProvider(ABC):
     def _create_chat_chain(
         self, vector_store: VectorStore
     ) -> ConversationalRetrievalChain:
+        """Create a conversational retrieval chain.
+
+        Args:
+            vector_store (VectorStore): The vector store for retrieving text.
+
+        Returns:
+            ConversationalRetrievalChain: The chat chain for conversation.
+        """
         llm = self.llm
         memory_buffer = ConversationBufferMemory(
             memory_key="chat_history", return_messages=True
@@ -59,20 +100,51 @@ class BaseChatProvider(ABC):
         return chat_chain
 
     def query(self, prompt: str) -> str:
+        """Query the chat chain with a user prompt.
+
+        Args:
+            prompt (str): The user's question.
+
+        Returns:
+            str: The response from the chat chain.
+        """
         result = self.chat_chain.invoke({"question": prompt})
         return result["answer"]
 
 
 class OllamaChatProvider(BaseChatProvider):
+    """Chat provider using the Ollama model and HuggingFace embeddings.
+
+    This class implements the abstract methods defined in BaseChatProvider.
+    """
+
     @property
     def embbedings(self) -> Embeddings:
+        """Get the HuggingFace embeddings model.
+
+        Returns:
+            Embeddings: The HuggingFace embeddings model.
+        """
         return HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-large")
 
     @property
     def llm(self) -> BaseChatModel:
+        """Get the Ollama language model.
+
+        Returns:
+            BaseChatModel: The Ollama language model.
+        """
         return ChatOllama(model="mistral")
 
     def _create_vector_store(self, uploaded_file) -> VectorStore:
+        """Create a vector store and manage GPU resources.
+
+        Args:
+            uploaded_file (BytesIO): The uploaded PDF file.
+
+        Returns:
+            VectorStore: The vector store created from the document text chunks.
+        """
         vector_store = super()._create_vector_store(uploaded_file)
         gc.collect()
         torch.cuda.empty_cache()
@@ -80,12 +152,27 @@ class OllamaChatProvider(BaseChatProvider):
 
 
 class OpenAIChatProvider(BaseChatProvider):
+    """Chat provider using the OpenAI models for embeddings and language.
+
+    This class implements the abstract methods defined in BaseChatProvider.
+    """
+
     @property
     def embbedings(self) -> Embeddings:
+        """Get the OpenAI embeddings model.
+
+        Returns:
+            Embeddings: The OpenAI embeddings model.
+        """
         return OpenAIEmbeddings()
 
     @property
     def llm(self) -> BaseChatModel:
+        """Get the OpenAI language model.
+
+        Returns:
+            BaseChatModel: The OpenAI language model.
+        """
         return ChatOpenAI()
 
 
@@ -124,10 +211,11 @@ def load_and_split_document(uploaded_file: BytesIO) -> List[str]:
 
 
 def prepare_chat(uploaded_file: BytesIO, chat_provider_type: str):
-    """Handle the creation of the conversation.
+    """Prepare the chat provider and store it in session state.
 
     Args:
         uploaded_file (BytesIO): The uploaded PDF file.
+        chat_provider_type (str): The type of chat provider to use.
     """
     providers_classes = {
         "OpenAI": OpenAIChatProvider,
@@ -147,7 +235,7 @@ def init_session_state():
 
 
 def handle_file_upload():
-    """Handle the file upload process."""
+    """Handle the file upload and chat provider selection process."""
     with st.sidebar:
         chat_provider_type = st.selectbox(
             "Chat type",
@@ -160,7 +248,7 @@ def handle_file_upload():
 
 
 def display_chat_history():
-    """Display the chat history."""
+    """Display the chat history in the Streamlit app."""
     for message in st.session_state.get("messages", []):
         role = message["role"]
         content = message["content"]
@@ -168,7 +256,7 @@ def display_chat_history():
 
 
 def handle_conversation():
-    """Handle the conversation input from the user."""
+    """Handle the conversation input and response process."""
     if "chat_provider" not in st.session_state:
         return
 
