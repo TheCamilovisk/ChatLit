@@ -1,5 +1,7 @@
 # ChatLit
 
+A RAG application for chatting with PDF documents. The LLM backend can be supplied by the OpenAI API or Ollama for local development.
+
 ## Install Instructions
 
 First of all, we need to install Ollama for the local pipeline. Follow the official documentation instructions for this. Then from the command line run:
