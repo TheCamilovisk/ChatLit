@@ -1,3 +1,4 @@
+import os
 from io import BytesIO
 
 import streamlit as st
@@ -21,8 +22,16 @@ def prepare_chat(uploaded_file: BytesIO, chat_provider_type: str):
         "OpenAI": OpenAIChatProvider,
         "Ollama (Mistral)": OllamaChatProvider,
     }
+    providers_kwargs = {
+        "OpenAI": {"uploaded_file": uploaded_file},
+        "Ollama (Mistral)": {
+            "uploaded_file": uploaded_file,
+            "base_url": os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+        },
+    }
     with st.spinner(f"Loading {uploaded_file.name}"):
-        chat_provider = providers_classes[chat_provider_type](uploaded_file)
+        kwargs = providers_kwargs[chat_provider_type]
+        chat_provider = providers_classes[chat_provider_type](**kwargs)
         st.session_state.chat_provider = chat_provider
 
     st.rerun()

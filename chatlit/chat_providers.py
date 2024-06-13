@@ -109,7 +109,22 @@ class OllamaChatProvider(BaseChatProvider):
     """Chat provider using the Ollama model and HuggingFace embeddings.
 
     This class implements the abstract methods defined in BaseChatProvider.
+
+    Attributes:
+        base_url (str): The base URL for the Ollama model API.
     """
+
+    def __init__(
+        self, uploaded_file: BytesIO, base_url: str = "http://localhost:11434"
+    ) -> None:
+        """Initialize the Ollama chat provider with a PDF file and base URL.
+
+        Args:
+            uploaded_file (BytesIO): The uploaded PDF file.
+            base_url (str, optional): The base URL for the Ollama model API. Defaults to "http://localhost:8501".
+        """
+        self.base_url = base_url
+        super().__init__(uploaded_file)
 
     @property
     def embbedings(self) -> Embeddings:
@@ -127,7 +142,7 @@ class OllamaChatProvider(BaseChatProvider):
         Returns:
             BaseChatModel: The Ollama language model.
         """
-        return ChatOllama(model="mistral")
+        return ChatOllama(model="mistral", base_url=self.base_url)
 
     def _create_vector_store(self, uploaded_file) -> VectorStore:
         """Create a vector store and manage GPU resources.
