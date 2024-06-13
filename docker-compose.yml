@@ -1,0 +1,43 @@
+services:
+  ollama:
+    volumes:
+      - ./ollama:/root/.ollama
+    container_name: ollama
+    ports:
+      - 11434:11434
+    pull_policy: always
+    tty: true
+    restart: unless-stopped
+    image: ollama/ollama:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  webapp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.webapp
+    volumes:
+      - ./huggingface:/workspace/app/huggingface
+    container_name: webapp
+    depends_on:
+      - ollama
+    ports:
+      - 8501:8501
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - HF_HOME=/workspace/app/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

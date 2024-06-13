@@ -1,0 +1,13 @@
+FROM pytorch/pytorch:latest
+
+RUN pip install python-dotenv streamlit pypdf faiss-cpu langchain langchain_community langchain_openai OpenAI transformers "sentence-transformers===2.2.2" InstructorEmbedding
+
+WORKDIR /workspace/app
+
+COPY chatlit chatlit
+COPY app.py .
+
+
+# ENTRYPOINT [ "python" ]
+
+ENTRYPOINT [ "streamlit", "run", "app.py" ]
