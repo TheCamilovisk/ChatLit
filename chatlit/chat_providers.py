@@ -1,4 +1,5 @@
 import gc
+import os
 from abc import ABC, abstractmethod
 from io import BytesIO
 
@@ -114,16 +115,18 @@ class OllamaChatProvider(BaseChatProvider):
         base_url (str): The base URL for the Ollama model API.
     """
 
-    def __init__(
-        self, uploaded_file: BytesIO, base_url: str = "http://localhost:11434"
-    ) -> None:
+    def __init__(self, uploaded_file: BytesIO, base_url: str = None) -> None:
         """Initialize the Ollama chat provider with a PDF file and base URL.
 
         Args:
             uploaded_file (BytesIO): The uploaded PDF file.
-            base_url (str, optional): The base URL for the Ollama model API. Defaults to "http://localhost:8501".
+            base_url (str, optional): The base URL for the Ollama model API. Case None defaults to "http://localhost:8501".
         """
-        self.base_url = base_url
+        self.base_url = (
+            base_url
+            if base_url is not None
+            else os.environ.get("OLLAMA_BASE_URL", "http://localhost:8501")
+        )
         super().__init__(uploaded_file)
 
     @property
