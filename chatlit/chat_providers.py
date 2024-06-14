@@ -115,17 +115,25 @@ class OllamaChatProvider(BaseChatProvider):
         base_url (str): The base URL for the Ollama model API.
     """
 
-    def __init__(self, uploaded_file: BytesIO, base_url: str = None) -> None:
+    def __init__(
+        self, uploaded_file: BytesIO, base_url: str = None, model_name: str = None
+    ) -> None:
         """Initialize the Ollama chat provider with a PDF file and base URL.
 
         Args:
             uploaded_file (BytesIO): The uploaded PDF file.
             base_url (str, optional): The base URL for the Ollama model API. Case None defaults to "http://localhost:8501".
+            model_name (str, Optional): The name of the model loaded in Ollama. Case None defaults to "llama3".
         """
         self.base_url = (
             base_url
             if base_url is not None
             else os.environ.get("OLLAMA_BASE_URL", "http://localhost:8501")
+        )
+        self.model_name = (
+            model_name
+            if model_name is not None
+            else os.environ.get("OLLAMA_MODEL_NAME", "llama3")
         )
         super().__init__(uploaded_file)
 
@@ -145,7 +153,7 @@ class OllamaChatProvider(BaseChatProvider):
         Returns:
             BaseChatModel: The Ollama language model.
         """
-        return ChatOllama(model="mistral", base_url=self.base_url)
+        return ChatOllama(model=self.model_name, base_url=self.base_url)
 
     def _create_vector_store(self, uploaded_file) -> VectorStore:
         """Create a vector store and manage GPU resources.

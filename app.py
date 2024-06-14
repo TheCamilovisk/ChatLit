@@ -20,7 +20,7 @@ def prepare_chat(uploaded_file: BytesIO, chat_provider_type: str):
     """
     providers_classes = {
         "OpenAI": OpenAIChatProvider,
-        "Ollama (Mistral)": OllamaChatProvider,
+        "Ollama": OllamaChatProvider,
     }
     with st.spinner(f"Loading {uploaded_file.name}"):
         chat_provider = providers_classes[chat_provider_type](uploaded_file)
@@ -40,7 +40,7 @@ def handle_file_upload():
     with st.sidebar:
         chat_provider_type = st.selectbox(
             "Chat type",
-            ("OpenAI", "Ollama (Mistral)"),
+            ("OpenAI", "Ollama"),
             disabled="chat_provider" in st.session_state,
         )
         if uploaded_file := st.file_uploader("Choose a PDF file", type="pdf"):
