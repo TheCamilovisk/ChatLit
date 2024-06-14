@@ -7,14 +7,14 @@ A RAG application for chatting with PDF documents. The LLM backend can be suppli
 First of all, we need to install Ollama for the local pipeline. Follow the official documentation instructions for this. Then from the command line run:
 
 ```shell
-ollama pull mistral
+ollama pull llama3
 ollama serve
 ```
-This will download the Mistral 7B model files and start the Ollama inference service with it.
+This will download the LLaMa 3 7B model files and start the Ollama inference service with it.
 
-**Obs:** If you wnat to play around with the model, you can also run:
+**Obs:** If you want to play around with the model, you can also run:
 ```shell
-ollama run mistral
+ollama run llama3
 ```
 
 After setting up the Ollama service, it's time to install the required packages for the application itself.
